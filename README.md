@@ -13,8 +13,8 @@ The script supports the following command-line options:
 - `-L <ssh tunnel>` (optional): Set the SSH tunnel configuration. The format is `[<local_bind>:]<local_port>:<remote_host>:<remote_port>`. Use this option to forward a local port to the remote Kubernetes API server.
 - `-n` (optional): Hop to `<remote_host>` to fetch the kube config file. Useful when you connect from your bastion to a remote Kubernetes API server.
 - `-s` (optional): Add `sudo` to the SSH command. Use this option if `sudo` access is required to read the kube config file.
-- `-t <tmp pattern>` (optional): Set the location to store the cached credentials. This is the location where the generated Kubernetes config file will be stored.
-- `-d <tunnel duration>` (optional): Set the duration for which the SSH tunnel will be available. Specify the duration in a format compatible with the `date` command. Default: 1 hour.
+- `-t <tmp dir>` (optional): Set the location to store the cached credentials. This is the location where the generated Kubernetes config files will be stored.
+- `-d <seconds>` (optional): Set the duration for which the SSH tunnel will be available. Default: 3600.
 
 ## Kubeconfig
 

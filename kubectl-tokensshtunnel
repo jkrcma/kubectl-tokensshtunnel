@@ -38,8 +38,8 @@ HELP="
     -L <ssh tunnel>       Set the SSH tunnel configuration (format: [<local_bind>:]<local_port>:<remote_host>:<remote_port>).
     -n                    Hop to <remote_host> to fetch the kube config file.
     -s                    Add 'sudo' to the SSH command.
-    -t <tmp pattern>      Set the location to store the cached credentials.
-    -d <tunnel duration>  Set the duration for which the tunnel will be available.
+    -t <tmp dir>          Set the location to store the cached credentials.
+    -d <seconds>          Set the duration for which the tunnel will be available. (default: 3600)
     -h                    Show this help message.
 "
 
