@@ -13,11 +13,12 @@ TMP_CRED="$HOME/.ktst_cache"
 REMOTE_KUBE_CONFIG="/etc/rancher/k3s/k3s.yaml"
 SSH_TUNNEL=""
 
-while getopts 'd:t:c:k:L:s' OPT; do
+while getopts 'd:t:c:k:L:sn' OPT; do
   case $OPT in
     c)  SSH_COMMAND=$OPTARG;;
     k)  REMOTE_KUBE_CONFIG=$OPTARG;;
     L)  SSH_TUNNEL=$OPTARG;;
+    n)  SSH_NEXTHOP="true";;
     s)  ADD_SUDO="true";;
     t)  TMP_CRED=$OPTARG;;
     d)  MAX_DURATION=$OPTARG;;
@@ -35,6 +36,7 @@ HELP="
     -c <ssh command>      Set the SSH command to use.
     -k <kube config>      Set the remote kube config file (default: /etc/rancher/k3s/k3s.yaml).
     -L <ssh tunnel>       Set the SSH tunnel configuration (format: [<local_bind>:]<local_port>:<remote_host>:<remote_port>).
+    -n                    Hop to <remote_host> to fetch the kube config file.
     -s                    Add 'sudo' to the SSH command.
     -t <tmp pattern>      Set the location to store the cached credentials.
     -d <tunnel duration>  Set the duration for which the tunnel will be available.
@@ -59,6 +61,7 @@ case "${OS}" in
     *)          echo "error retrieving arch"; exit 1;;
 esac
 
+SSH_COMMAND_HOP=""
 if [ -z "$ADD_SUDO" ];
 then
     SUDO_CMD=" "
@@ -74,11 +77,12 @@ then
     # 127.0.0.1:7443:127.0.0.1:6443
     SEPARATORS=$(echo "${SSH_TUNNEL}" | sed 's/:/:\n/g' | wc -l)
 
-    if [ $SEPARATORS -gt 3 ];
+    if [ $SEPARATORS -ge 3 ];
     then
         LISTEN=$(echo "${SSH_TUNNEL}" | rev | cut -f3- -d: | rev | sed 's/:/ /')
+        [ ! -z "$SSH_NEXTHOP" ] && SSH_COMMAND_HOP="ssh $(echo "${SSH_TUNNEL}" | cut -f2 -d:)"
 
-        nc -w 1 -z $LISTEN >/dev/null 2>/dev/null
+        nc -w 1 -z 127.0.0.1 $LISTEN >/dev/null 2>/dev/null
 
         if [ $? -ne 0 ];
         then
@@ -103,7 +107,7 @@ then
     fi
 fi
 
-GET_KUBECONFIG_CMD="$SSH_COMMAND \"$SUDO_CMD cat ${REMOTE_KUBE_CONFIG}\""
+GET_KUBECONFIG_CMD="$SSH_COMMAND \"$SSH_COMMAND_HOP $SUDO_CMD cat ${REMOTE_KUBE_CONFIG}\""
 
 CCD_DATA="$(sh -c "$GET_KUBECONFIG_CMD" 2>/dev/null | grep client-certificate-data | awk '{ print $2 }' | base64 -d | awk '{ printf "%s\\n",$0 }')"
 CKD_DATA="$(sh -c "$GET_KUBECONFIG_CMD" 2>/dev/null | grep client-key-data | awk '{ print $2 }' | base64 -d | awk '{ printf "%s\\n",$0 }')"
