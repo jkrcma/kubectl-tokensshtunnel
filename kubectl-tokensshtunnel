@@ -112,15 +112,15 @@ CCD_DATA="$(sh -c "$GET_KUBECONFIG_CMD" 2>/dev/null | grep client-certificate-da
 CKD_DATA="$(sh -c "$GET_KUBECONFIG_CMD" 2>/dev/null | grep client-key-data | awk '{ print $2 }' | base64 -d | awk '{ printf "%s\\n",$0 }')"
 
 echo "{
-    \"kind\":\"ExecCredential\",
-    \"apiVersion\":\"client.authentication.k8s.io/v1beta1\",
-    \"spec\":{
-        \"interactive\":false
-        },
-    \"status\":{
-        \"expirationTimestamp\":\"${EXPIRE_TOKEN}\",
-        \"clientCertificateData\":\"${CCD_DATA}\",
-        \"clientKeyData\":\"${CKD_DATA}\"
-        }
-    }" | tee $TMP_CRED_FILE
+  \"kind\": \"ExecCredential\",
+  \"apiVersion\": \"client.authentication.k8s.io/v1beta1\",
+  \"spec\": {
+    \"interactive\": false
+  },
+  \"status\": {
+    \"expirationTimestamp\": \"${EXPIRE_TOKEN}\",
+    \"clientCertificateData\": \"${CCD_DATA}\",
+    \"clientKeyData\": \"${CKD_DATA}\"
+  }
+}" | tee $TMP_CRED_FILE
 
