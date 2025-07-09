@@ -9,7 +9,7 @@ load_mac() {
 }
 
 MAX_DURATION="3600"
-TMP_CRED="$HOME/.ktst_cache"
+TMP_CRED="$HOME/.kube/cache/ktst"
 REMOTE_KUBE_CONFIG="/etc/rancher/k3s/k3s.yaml"
 SSH_TUNNEL=""
 
@@ -48,7 +48,8 @@ if [ "$JELP" = "yes" ] || [ -z "$SSH_COMMAND" ]; then
   exit 1
 fi
 
-if [ $TMP_CRED == "/" ] || [ -d $TMP_CRED ];
+mkdir -p $TMP_CRED 2>/dev/null
+if [ ! -d $TMP_CRED ];
 then
     echo "WTF: TMP_CRED: $TMP_CRED"
     exit 1
@@ -69,6 +70,7 @@ else
     SUDO_CMD="sudo"
 fi
 
+TMP_CRED_FILE="$TMP_CRED/$(echo "${SSH_TUNNEL:-null}" | tr : .)"
 # setup tunnel
 
 if [ ! -z "${SSH_TUNNEL}" ];
@@ -90,15 +92,12 @@ then
             nohup $SSH_COMMAND -L "${SSH_TUNNEL}" "sleep ${MAX_DURATION}" >/dev/null >/dev/null 2>&1 &
             
             # refresh credentials
-            if [ -f $TMP_CRED ];
-            then
-                rm $TMP_CRED
-            fi
+            rm -f $TMP_CRED_FILE
         fi
 
-        if [ -f $TMP_CRED ];
+        if [ -f $TMP_CRED_FILE ];
         then
-            cat $TMP_CRED
+            cat $TMP_CRED_FILE
             exit 0
         fi 
     else
@@ -123,5 +122,5 @@ echo "{
         \"clientCertificateData\":\"${CCD_DATA}\",
         \"clientKeyData\":\"${CKD_DATA}\"
         }
-    }" | tee $TMP_CRED
+    }" | tee $TMP_CRED_FILE
 
