@@ -20,7 +20,7 @@ The script supports the following command-line options:
 
 To configure your kubeconfig file, add the following configuration to the users section, update accordingly to your needs:
 
-```
+```yaml
 - name: sshtunnel
   user:
     exec:
@@ -39,3 +39,20 @@ To configure your kubeconfig file, add the following configuration to the users 
       interactiveMode: IfAvailable
       provideClusterInfo: false
 ```
+
+## Cluster config extension
+
+Hardcoding tunnel ports with `-L` requires to define a user per each cluster. If you only use administrator accounts all users are nearly identical (user `kubernetes-admin`), you can move the SSH tunnel host and port definition into the config extension:
+
+```yaml
+- cluster:
+    certificate-authority-data: <ohlongjohnson>
+    extensions:
+    - name: client.authentication.k8s.io/exec
+      extension:
+        ssh-tunnel-to: kubemaster1.example.com:6443
+    server: https://127.0.0.1:55443
+  name: kubemaster1
+```
+
+In the user definition, skip the entire `-L <value>` part.

@@ -62,6 +62,15 @@ case "${OS}" in
     *)          echo "error retrieving arch"; exit 1;;
 esac
 
+# Tunnel info can be passed from kubeconfig
+if echo "$KUBERNETES_EXEC_INFO" | jq -re '.spec.cluster.config' >/dev/null;
+then
+    api_host="$(echo "$KUBERNETES_EXEC_INFO" | jq -r '.spec.cluster.config."ssh-tunnel-to"')"
+    local_port="$(echo "$KUBERNETES_EXEC_INFO" | jq -r '.spec.cluster.server' | rev | cut -d: -f1 | rev)"
+
+    SSH_TUNNEL="${local_port}:${api_host}"
+fi
+
 SSH_COMMAND_HOP=""
 if [ -z "$ADD_SUDO" ];
 then
