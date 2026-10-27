@@ -8,7 +8,7 @@ To install it you just need to copy `kubectl-tokensshtunnel` anywhere within you
 
 The script supports the following command-line options:
 
-- `-c <ssh command>`: Set the SSH command to use. This is the command used to establish an SSH connection to the remote server.
+- `-c <ssh command>` (optional): Set the SSH command to use. This is the command used to establish an SSH connection to the remote server. If omitted, the script connects directly to `<remote_host>` from the tunnel definition with plain `ssh` (see [Direct mode](#direct-mode-teleport)).
 - `-k <kube config>` (optional): Set the remote kube config file location. Default: `/etc/rancher/k3s/k3s.yaml`.
 - `-L <ssh tunnel>` (optional): Set the SSH tunnel configuration. The format is `[<local_bind>:]<local_port>:<remote_host>:<remote_port>`. Use this option to forward a local port to the remote Kubernetes API server.
 - `-n` (optional): Hop to `<remote_host>` to fetch the kube config file. Useful when you connect from your bastion to a remote Kubernetes API server.
@@ -56,3 +56,36 @@ Hardcoding tunnel ports with `-L` requires to define a user per each cluster. If
 ```
 
 In the user definition, skip the entire `-L <value>` part.
+
+## Direct mode (Teleport)
+
+Without `-c`, the script connects straight to the tunnel's `<remote_host>` using plain `ssh` from your `PATH`, e.g. a shim that routes short host names through `tsh ssh`:
+
+```
+ssh -L <ssh tunnel> <remote_host> sleep <duration>
+ssh <remote_host> [sudo] cat <kube config>
+```
+
+The domain part of `<remote_host>` is stripped (`kubemaster1.example.com` becomes `kubemaster1`), because such shims usually only resolve bare short names. Combined with the cluster config extension, the user definition shrinks to:
+
+```yaml
+- name: sshtunnel
+  user:
+    exec:
+      apiVersion: client.authentication.k8s.io/v1beta1
+      args:
+      - tokensshtunnel
+      - -s
+      command: kubectl
+      env: null
+      interactiveMode: IfAvailable
+      provideClusterInfo: true
+```
+
+Notes:
+
+- `provideClusterInfo: true` is required for the cluster config extension to reach the script.
+- `sudo` must not ask for a password, the remote command runs without a TTY.
+- The tunnel target (`<remote_host>:<remote_port>`) is resolved on the remote host itself.
+- `kubectl` must see the shim in its `PATH`, which may not be the case for GUI clients.
+- If fetching the credentials fails (e.g. an expired Teleport login), the script exits with an error and caches nothing.

@@ -30,10 +30,11 @@ done
 shift $(($OPTIND - 1))
 
 HELP="
-    usage: $0 -c <ssh command>
+    usage: $0 [-c <ssh command>] [-L <ssh tunnel>]
 
     Options:
-    -c <ssh command>      Set the SSH command to use.
+    -c <ssh command>      Set the SSH command to use. If omitted, connect directly to <remote_host>
+                          with plain 'ssh' (e.g. through a Teleport ssh shim).
     -k <kube config>      Set the remote kube config file (default: /etc/rancher/k3s/k3s.yaml).
     -L <ssh tunnel>       Set the SSH tunnel configuration (format: [<local_bind>:]<local_port>:<remote_host>:<remote_port>).
     -n                    Hop to <remote_host> to fetch the kube config file.
@@ -43,7 +44,7 @@ HELP="
     -h                    Show this help message.
 "
 
-if [ "$JELP" = "yes" ] || [ -z "$SSH_COMMAND" ]; then
+if [ "$JELP" = "yes" ]; then
   echo "$HELP"
   exit 1
 fi
@@ -71,6 +72,12 @@ then
     SSH_TUNNEL="${local_port}:${api_host}"
 fi
 
+# Without -c the SSH target is taken from the tunnel, so one of them is required
+if [ -z "$SSH_COMMAND" ] && [ -z "$SSH_TUNNEL" ]; then
+  echo "$HELP"
+  exit 1
+fi
+
 SSH_COMMAND_HOP=""
 if [ -z "$ADD_SUDO" ];
 then
@@ -90,15 +97,26 @@ then
 
     if [ $SEPARATORS -ge 3 ];
     then
-        LISTEN=$(echo "${SSH_TUNNEL}" | rev | cut -f3- -d: | rev | sed 's/:/ /')
-        [ ! -z "$SSH_NEXTHOP" ] && SSH_COMMAND_HOP="ssh $(echo "${SSH_TUNNEL}" | cut -f2 -d:)"
+        LISTEN=$(echo "${SSH_TUNNEL}" | rev | cut -f3 -d: | rev)
+        REMOTE_HOST=$(echo "${SSH_TUNNEL}" | rev | cut -f2 -d: | rev)
+
+        if [ -z "$SSH_COMMAND" ];
+        then
+            # Direct mode: options must precede the host for the Teleport shim,
+            # which only resolves bare short names
+            SSH_HOST="${REMOTE_HOST%%.*}"
+            TUNNEL_CMD="ssh -L ${SSH_TUNNEL} ${SSH_HOST} sleep ${MAX_DURATION}"
+        else
+            [ ! -z "$SSH_NEXTHOP" ] && SSH_COMMAND_HOP="ssh ${REMOTE_HOST}"
+            TUNNEL_CMD="$SSH_COMMAND -L ${SSH_TUNNEL} sleep ${MAX_DURATION}"
+        fi
 
         nc -w 1 -z 127.0.0.1 $LISTEN >/dev/null 2>/dev/null
 
         if [ $? -ne 0 ];
         then
             # spin-up tunnel
-            nohup $SSH_COMMAND -L "${SSH_TUNNEL}" "sleep ${MAX_DURATION}" >/dev/null >/dev/null 2>&1 &
+            nohup $TUNNEL_CMD </dev/null >/dev/null 2>&1 &
             
             # refresh credentials
             rm -f $TMP_CRED_FILE
@@ -115,10 +133,23 @@ then
     fi
 fi
 
-GET_KUBECONFIG_CMD="$SSH_COMMAND \"$SSH_COMMAND_HOP $SUDO_CMD cat ${REMOTE_KUBE_CONFIG}\""
+if [ ! -z "$SSH_HOST" ];
+then
+    GET_KUBECONFIG_CMD="ssh $SSH_HOST \"$SUDO_CMD cat ${REMOTE_KUBE_CONFIG}\""
+else
+    GET_KUBECONFIG_CMD="$SSH_COMMAND \"$SSH_COMMAND_HOP $SUDO_CMD cat ${REMOTE_KUBE_CONFIG}\""
+fi
 
-CCD_DATA="$(sh -c "$GET_KUBECONFIG_CMD" 2>/dev/null | grep client-certificate-data | awk '{ print $2 }' | base64 -d | awk '{ printf "%s\\n",$0 }')"
-CKD_DATA="$(sh -c "$GET_KUBECONFIG_CMD" 2>/dev/null | grep client-key-data | awk '{ print $2 }' | base64 -d | awk '{ printf "%s\\n",$0 }')"
+KUBECONFIG_DATA="$(sh -c "$GET_KUBECONFIG_CMD" </dev/null 2>/dev/null)"
+CCD_DATA="$(echo "$KUBECONFIG_DATA" | grep client-certificate-data | awk '{ print $2 }' | base64 -d | awk '{ printf "%s\\n",$0 }')"
+CKD_DATA="$(echo "$KUBECONFIG_DATA" | grep client-key-data | awk '{ print $2 }' | base64 -d | awk '{ printf "%s\\n",$0 }')"
+
+# Never cache empty credentials (expired Teleport login, unreachable host, ...)
+if [ -z "$CCD_DATA" ] || [ -z "$CKD_DATA" ];
+then
+    echo "Failed to fetch credentials via: $GET_KUBECONFIG_CMD" >&2
+    exit 1
+fi
 
 echo "{
   \"kind\": \"ExecCredential\",
